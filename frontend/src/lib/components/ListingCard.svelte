@@ -705,7 +705,10 @@
   }
   .fee-chip {
     display: inline-flex;
-    align-items: baseline;
+    /* center (not baseline): the label (500) and amount (700) spans have
+       different metrics, so baseline alignment left them floating at uneven
+       heights inside the fixed 24px box. Matches poi-chip/conv-chip. */
+    align-items: center;
     gap: 5px;
     height: 24px;
     padding: 0 9px;
@@ -715,6 +718,7 @@
     font-weight: 600;
     color: #5B574E;
     line-height: 1;
+    white-space: nowrap;
   }
   .fee-chip-rent {
     background: var(--accent-soft);
