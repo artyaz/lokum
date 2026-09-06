@@ -1,0 +1,6 @@
+# The backend (API + Playwright fetchers + cron) never runs on Vercel —
+# it needs Postgres, Chromium, and long-lived processes. Exclude it (and
+# ops docs) from Vercel uploads entirely so server code and any local
+# artefacts can never ship to the edge, even on a repo-root import.
+backend/
+docs/

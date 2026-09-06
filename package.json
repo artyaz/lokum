@@ -1,0 +1,14 @@
+{
+  "name": "lokum",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Rental aggregator — frontend/ (Vercel) + backend/ (VPS). Convenience scripts only; each module keeps its own dependencies.",
+  "scripts": {
+    "install:all": "npm --prefix backend ci --ignore-scripts --no-audit --no-fund && npm --prefix frontend ci --ignore-scripts --no-audit --no-fund",
+    "build:frontend": "npm --prefix frontend run build",
+    "start:backend": "npm --prefix backend start",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "test:backend": "FAKE_DB=1 node backend/test/test_totalprice_heuristic.mjs && FAKE_DB=1 node backend/test/test_metro.mjs && FAKE_DB=1 node backend/test/test_aesthetic.mjs"
+  }
+}

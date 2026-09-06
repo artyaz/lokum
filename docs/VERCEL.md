@@ -6,8 +6,11 @@ any route serves `index.html` and the `#/...` hash does the rest.
 ## Deploy steps
 
 1. Vercel → Add New Project → import `artyaz/lokum`.
-2. Root Directory: `frontend`. Framework preset: Vite. Build command and
-   output use the defaults (`npm run build` → `dist`).
+2. Root Directory: `frontend` (preferred). Framework preset: Vite. Build
+   command and output use the defaults (`npm run build` → `dist`).
+   Importing the repo root works too — root `vercel.json` + `.vercelignore`
+   pin the build to `frontend/` only, so the backend is never installed,
+   built, uploaded, or run on Vercel.
 3. Environment variable (Production + Preview):
    - `VITE_API_URL=https://flats.chmyl.com` (the public VPS API origin)
 4. Deploy. Note the `https://<project>.vercel.app` URL.
