@@ -311,6 +311,9 @@
         {#if listing.isNew}
           <span class="badge-new">NEW TODAY</span>
         {/if}
+        {#if listing.topped}
+          <span class="badge-top">★ TOP PICK</span>
+        {/if}
       </div>
       <button class="save-btn" on:click={toggleSave} aria-label="Save">
         {#if listing.saved}
@@ -407,6 +410,15 @@
       <Icon name="location" size={14} color="#9A9488" stroke={1.7} />
       <span>{listing.district || listing.city?.name}, {listing.city?.name} · {listing.rooms || '?'} rooms · {listing.area || '?'} m²{#if listing.floor} · floor {listing.floor}{/if}</span>
     </div>
+
+    {#if listing.nearestMetro}
+      <div class="conv metro-row">
+        <span class="conv-chip metro-chip" title="Closest metro station">
+          <Icon name="transport" size={13} stroke={1.7} />
+          {listing.nearestMetro.name} · {formatDistance(listing.nearestMetro.distance_m)}
+        </span>
+      </div>
+    {/if}
 
     {#if listing.conveniences?.length}
       <div class="conv">
@@ -512,6 +524,24 @@
     pointer-events: none;
   }
   .top-left, .save-btn { pointer-events: auto; }
+  .top-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .badge-top {
+    height: 26px;
+    padding: 0 10px;
+    border-radius: 13px;
+    background: rgba(214, 164, 25, .95);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    display: inline-flex;
+    align-items: center;
+  }
   .badge-new {
     height: 26px;
     padding: 0 10px;
@@ -741,6 +771,12 @@
   .region-chip {
     background: var(--accent-soft);
     color: var(--accent);
+    font-weight: 600;
+  }
+  .metro-row { margin-bottom: 10px; }
+  .metro-chip {
+    background: #EAF0FA;
+    color: #2F5DA3;
     font-weight: 600;
   }
   .actions {

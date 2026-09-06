@@ -115,9 +115,26 @@ async function decorate(rows, userId) {
       totalBreakdown: fees,                    // legacy alias of `fees`
       fees,                                    // NEW canonical full breakdown (Task E)
       totalMonthly: fees?.total_monthly ?? null, // NEW headline monthly cost (Task E)
-      currency: fees?.currency ?? 'PLN'          // NEW currency code (Task E)
+      currency: fees?.currency ?? 'PLN',         // NEW currency code (Task E)
+      // Metro proximity (nearest_metro JSONB {name, line, distance_m}) +
+      // aesthetic topping flag. nearestMetro is null until the metro
+      // backfill tags the listing (requires coordinates).
+      nearestMetro: parseMetro(r.nearest_metro),
+      aestheticScore: r.aesthetic_score ?? null,
+      topped: !!r.topped
     };
   });
+}
+
+// nearest_metro arrives from pg as a parsed object already (JSONB), but be
+// tolerant of string rows (tests, fakedb) so the feed never 500s on shape.
+function parseMetro(v) {
+  if (!v) return null;
+  if (typeof v === 'string') {
+    try { v = JSON.parse(v); } catch { return null; }
+  }
+  if (!v || typeof v !== 'object' || !v.name) return null;
+  return { name: String(v.name), line: String(v.line || ''), distance_m: Number(v.distance_m) || 0 };
 }
 
 function formatPrice(n) {
@@ -229,6 +246,7 @@ router.get('/', optionalUser, async (req, res) => {
              l.district, l.street, l.address, l.lat, l.lng, l.url,
              l.posted_at, l.first_seen_at,
              l.total_estimate, l.total_breakdown,
+             l.nearest_metro, l.aesthetic_score, l.topped,
              EXISTS(
                SELECT 1 FROM cron_run_listings crl2
                JOIN cron_runs cr2 ON cr2.id = crl2.cron_run_id
@@ -255,9 +273,11 @@ router.get('/', optionalUser, async (req, res) => {
       totalCount = parseInt(cr.rows[0]?.cnt || '0');
     } catch (e) { /* fallback below */ }
 
-    // Data query with interleave ordering + pagination
+    // Data query with interleave ordering + pagination. Topped (TOP PICK)
+    // listings surface first, then the per-source interleave as before.
     const sql = baseSql + `
-      ORDER BY ROW_NUMBER() OVER (PARTITION BY l.source_id ORDER BY l.first_seen_at DESC, l.posted_at DESC NULLS LAST)
+      ORDER BY l.topped DESC,
+        ROW_NUMBER() OVER (PARTITION BY l.source_id ORDER BY l.first_seen_at DESC, l.posted_at DESC NULLS LAST)
       LIMIT $${idx++} OFFSET $${idx++}
     `;
     params.push(limit, offset);
@@ -345,6 +365,7 @@ router.get('/:id', optionalUser, async (req, res) => {
               l.district, l.street, l.address, l.lat, l.lng, l.url,
               l.posted_at, l.first_seen_at, l.last_seen_at, l.is_active,
               l.raw, l.total_estimate, l.total_breakdown,
+              l.nearest_metro, l.aesthetic_score, l.topped,
               l.photo_phash, l.duplicate_of_id, l.duplicate_source,
               s.name AS source_name, s.slug AS source_slug, s.color AS source_color,
               c.name AS city_name, c.name_pl AS city_name_pl, c.slug AS city_slug

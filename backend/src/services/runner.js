@@ -41,6 +41,7 @@ import { AllegroScraper } from './scrapers/allegro.js';
 import { GethomeScraper } from './scrapers/gethome.js';
 import { persistListing } from './scrapers/base.js';
 import { translateParams, translateBatch } from './translate.js';
+import { backfillMetro } from './metro.js';
 import { resetAICircuit, aiCircuitState } from './ai-client.js';
 import { dedupeForListings, dedupeCrossRun } from './dedupe.js';
 import { computeForListings } from './totalprice.js';
@@ -733,6 +734,19 @@ export async function runFetchCycle({ triggeredBy = 'cron', sourceIds = [], city
       }
     } catch (e) {
       console.error('[runner] enrich backfill failed:', e.message);
+    }
+
+    // Metro proximity backfill: pure local haversine over the static OSM
+    // station dataset (no AI cost), so it sweeps generously every run and
+    // converges to ALL listings with coordinates. Runs right after
+    // enrichment because enrichment is what fills in missing coords.
+    try {
+      const mm = await backfillMetro();
+      if (mm.updated) {
+        console.log(`[runner] metro: ${mm.updated} listings tagged (remaining ${mm.remaining})`);
+      }
+    } catch (e) {
+      console.error('[runner] metro backfill failed:', e.message);
     }
 
     // Backlog catch-up: the new-listing phases above are capped (120
