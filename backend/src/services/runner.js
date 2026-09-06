@@ -42,6 +42,7 @@ import { GethomeScraper } from './scrapers/gethome.js';
 import { persistListing } from './scrapers/base.js';
 import { translateParams, translateBatch } from './translate.js';
 import { backfillMetro } from './metro.js';
+import { rateAestheticBacklog } from './aesthetic.js';
 import { resetAICircuit, aiCircuitState } from './ai-client.js';
 import { dedupeForListings, dedupeCrossRun } from './dedupe.js';
 import { computeForListings } from './totalprice.js';
@@ -770,6 +771,23 @@ export async function runFetchCycle({ triggeredBy = 'cron', sourceIds = [], city
       }
     } catch (e) {
       console.error('[runner] AI backlog failed:', e.message);
+    }
+
+    // Aesthetic vision pass: eligible budget/metro/centrum rentals get
+    // their photos rated for modern/clean looks; the best are flagged
+    // topped so the feed surfaces them first with the TOP PICK chip.
+    // Bounded (AESTHETIC_PER_RUN) — vision calls are the priciest in the
+    // pipeline — and oldest-first for convergence.
+    try {
+      const aesN = parseInt(process.env.AESTHETIC_PER_RUN || '20', 10);
+      if (aesN > 0) {
+        const ar = await rateAestheticBacklog(aesN);
+        if (ar.rated || ar.failed) {
+          console.log(`[runner] aesthetic: ${ar.rated} rated, ${ar.topped} topped (${ar.failed} failed, ${ar.aiCalls} AI calls)`);
+        }
+      }
+    } catch (e) {
+      console.error('[runner] aesthetic pass failed:', e.message);
     }
 
     // Cross-run dedup: now that enrichment gave coords to previously-unlocated
