@@ -26,9 +26,9 @@ database needed for UI work.
 
 ## Split deploy (UI on Vercel, API + fetch on VPS)
 
-1. Vercel project with **Root Directory = `frontend`** (preferred), or
-   import the repo root — `vercel.json` falls back to building `frontend/`
-   only either way. Set `VITE_API_URL` to the public API origin.
+1. Vercel project importing the **repo root** (Root Directory `./`).
+   `vercel.json` builds `frontend/` only; `VITE_API_URL` points at the
+   public API origin.
 2. Backend + cron stay on the VPS. Full steps: `docs/VERCEL.md`,
    then the API-only cutover: `docs/VPS-API-ONLY.md`.
 
