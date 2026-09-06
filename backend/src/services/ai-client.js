@@ -9,8 +9,9 @@
 //   Body: { model, messages, max_tokens, temperature, stream:false }
 //
 // Model:
-//   deepseek/deepseek-chat   (the non-reasoning DeepSeek variant on OpenRouter)
-//   Override with OPENROUTER_MODEL env var.
+//   openai/gpt-5.6-luna   (OpenAI GPT Luna via OpenRouter, reasoning effort
+//   xhigh by default — see AI_REASONING_EFFORT). Override with
+//   OPENROUTER_MODEL env var.
 //
 // Efficiency invariants preserved from agent A7's prep work:
 //   - hard 45s timeout per call (Promise.race with setTimeout) — DeepSeek on
@@ -33,13 +34,15 @@ import { query, one, many } from '../db.js';
 // --- Configuration ----------------------------------------------------------
 const OPENROUTER_URL = process.env.OPENROUTER_URL || 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || null;
-// deepseek/deepseek-chat is the non-reasoning DeepSeek variant on OpenRouter
-// (the reasoning variant is deepseek/deepseek-r1). The user's brief said
-// "~deepseek/deepseek-v4-flash-latest, NON-reasoning" — that id does not
-// currently exist on OpenRouter, so we default to the user's explicit fallback
-// (deepseek/deepseek-chat) and keep it overridable via OPENROUTER_MODEL so
-// when OpenRouter does expose a v4-flash id, the swap is a single env edit.
-const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || 'deepseek/deepseek-chat';
+// OpenAI GPT Luna via OpenRouter (verified id on the /models catalogue).
+// Override with OPENROUTER_MODEL env var — any OpenRouter chat-completions
+// model id works (e.g. openai/gpt-5.6-luna-pro, deepseek/deepseek-chat).
+const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-5.6-luna';
+// Reasoning effort for models that support it (OpenAI gpt-5.x family:
+// none|low|medium|high|xhigh). Sent as the OpenRouter `reasoning.effort`
+// request field; ignored by models without reasoning support. Empty string
+// disables the field entirely.
+const REASONING_EFFORT = (process.env.AI_REASONING_EFFORT || 'xhigh').trim();
 const HARD_TIMEOUT_MS = parseInt(process.env.AI_TIMEOUT_MS || '45000', 10);
 const DEFAULT_MAX_TOKENS = parseInt(process.env.AI_MAX_TOKENS || '1024', 10);
 const DEFAULT_TEMPERATURE = parseFloat(process.env.AI_TEMPERATURE || '0.2');
@@ -127,17 +130,23 @@ const PRIMARY_REPROBE_MS = 30 * 60 * 1000;
 
 function isFreeModel(m) { return m.endsWith(':free'); }
 
-async function rawCall(headers, system, user, model, maxTokens, temperature, timeoutMs) {
-  const body = JSON.stringify({
+async function rawCall(headers, system, user, model, maxTokens, temperature, timeoutMs, aiOpts = {}) {
+  const effort = aiOpts.reasoningEffort !== undefined ? aiOpts.reasoningEffort : REASONING_EFFORT;
+  const payload = {
     model,
     stream: false,
     messages: [
       { role: 'system', content: system },
-      { role: 'user', content: user }
+      // Multimodal (vision) calls pass content-parts; default is plain text.
+      { role: 'user', content: aiOpts.userContent || user }
     ],
     max_tokens: maxTokens,
     temperature
-  });
+  };
+  // Reasoning effort (e.g. "xhigh" for GPT Luna). Only sent when configured;
+  // OpenRouter ignores it for models without reasoning support.
+  if (effort) payload.reasoning = { effort };
+  const body = JSON.stringify(payload);
   return withTimeout(
     fetch(OPENROUTER_URL, { method: 'POST', headers, body }),
     timeoutMs,
@@ -157,6 +166,10 @@ async function rawCall(headers, system, user, model, maxTokens, temperature, tim
  * @param {string} [args.opts.model]          override DEFAULT_MODEL
  * @param {number} [args.opts.maxTokens]      override DEFAULT_MAX_TOKENS
  * @param {number} [args.opts.temperature]   override DEFAULT_TEMPERATURE
+ * @param {string} [args.opts.reasoningEffort] override REASONING_EFFORT ('' disables)
+ * @param {Array}  [args.opts.userContent]   when set, replaces the plain user
+ *   string with a multimodal content-parts array (e.g. [{type:'text',text},
+ *   {type:'image_url',image_url:{url}}] for vision calls)
  * @returns {Promise<string>} content string from the model
  * @throws  {Error} with .code ∈ {'circuit_open','timeout','http','empty','not_configured','parse'}
  */
@@ -182,6 +195,8 @@ export async function callAI({ system, user, opts = {} }) {
   const primaryModel = opts.model || DEFAULT_MODEL;
   let maxTokens = opts.maxTokens || DEFAULT_MAX_TOKENS;
   const temperature = opts.temperature != null ? opts.temperature : DEFAULT_TEMPERATURE;
+  // Per-call multimodal + reasoning overrides (vision passes userContent parts).
+  const aiOpts = { reasoningEffort: opts.reasoningEffort, userContent: opts.userContent };
 
   const headers = {
     'Content-Type': 'application/json',
@@ -206,7 +221,7 @@ export async function callAI({ system, user, opts = {} }) {
     let raw;
     let data;
     try {
-      raw = await rawCall(headers, system, user, model, maxTokens, temperature, timeoutMs);
+      raw = await rawCall(headers, system, user, model, maxTokens, temperature, timeoutMs, aiOpts);
 
       if (!raw.ok) {
         const errText = await raw.text().catch(() => '');
@@ -231,7 +246,7 @@ export async function callAI({ system, user, opts = {} }) {
           const candidates = FREE_MODELS.filter(m => m !== model);
           for (const fm of candidates) {
             try {
-              raw = await rawCall(headers, system, user, fm, maxTokens, temperature, timeoutMs);
+              raw = await rawCall(headers, system, user, fm, maxTokens, temperature, timeoutMs, aiOpts);
               if (raw.ok) {
                 const text = await raw.text();
                 data = JSON.parse(text);
