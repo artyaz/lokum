@@ -3,9 +3,5 @@
   "framework": "vite",
   "installCommand": "cd frontend && npm ci --ignore-scripts --no-audit --no-fund",
   "buildCommand": "cd frontend && npm run build",
-  "outputDirectory": "frontend/dist",
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "https://api.chmyl.com/api/:path*" },
-    { "source": "/s/:path*", "destination": "https://api.chmyl.com/s/:path*" }
-  ]
+  "outputDirectory": "frontend/dist"
 }
