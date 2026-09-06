@@ -368,12 +368,48 @@ function extractFromRegex(listing) {
 }
 
 /**
+ * Graceful heuristic estimate — last-resort fallback when a listing has no
+ * fee details at all (no description, no params) so the AI and the regex
+ * extractor both come up empty. Estimates the utilities bundle from the
+ * flat size (typical Polish rental: ~7 PLN/m²/month for water + heating +
+ * garbage + electricity, clamped to a sane band) and marks it estimated so
+ * the UI can render it as a guess, not a fact.
+ *
+ * Returns null when even the rent is missing (price <= 0, e.g. a watcher
+ * stub awaiting enrichment) — there is nothing honest to add to.
+ */
+export function heuristicEstimate(listing) {
+  const rent = pickInt(listing.price);
+  if (rent == null || rent <= 0) return null;
+  const area = typeof listing.area === 'number' && listing.area > 0 ? listing.area : null;
+  const rooms = typeof listing.rooms === 'number' && listing.rooms > 0 ? listing.rooms : null;
+  let utilities;
+  if (area) utilities = Math.round(area * 7);
+  else if (rooms) utilities = rooms * 90;
+  else utilities = 250;
+  utilities = Math.min(500, Math.max(150, utilities));
+  return {
+    rent,
+    admin_fee: null,
+    utilities: null,
+    parking: null,
+    extras: [{ name: 'Utilities (est.)', amount: utilities, estimated: true }],
+    total_monthly: rent + utilities,
+    currency: CURRENCY,
+    notes: 'Heuristic estimate: the listing states no fee details, so utilities were guessed from the flat size.',
+    computed_at: new Date().toISOString()
+  };
+}
+
+/**
  * Single-listing AI estimate. Uses the shared seam (circuit-breaker + 15s
  * timeout). Falls back to extractFromRegex on any error so the rest of the run
  * doesn't break.
  */
 export async function computeTotalEstimate(listing) {
-  if (!listing.description && !(listing.params || []).length) return null;
+  // No fee text at all — skip straight to the size-based heuristic so the
+  // listing still gets a (marked-estimated) total instead of nothing.
+  if (!listing.description && !(listing.params || []).length) return heuristicEstimate(listing);
 
   try {
     const content = await callAI({
@@ -388,7 +424,7 @@ export async function computeTotalEstimate(listing) {
     return clampResult(parsed, listing.price);
   } catch (e) {
     console.warn(`[totalprice] AI failed (${e.code || e.message}), using regex fallback`);
-    return extractFromRegex(listing);
+    return extractFromRegex(listing) || heuristicEstimate(listing);
   }
 }
 
@@ -463,7 +499,9 @@ export async function computeForListings(listingIds, { limit = 80 } = {}) {
     const l = byId.get(id);
     if (!l) { result.failed++; continue; }
     if (l.total_estimate != null) { result.cached++; continue; }
-    if (!l.description && !(l.raw?.params || []).length) { result.failed++; continue; }
+    // No rent yet (watcher stub awaiting enrichment) — nothing honest to
+    // total; the backlog pass picks it up once enrichment fills the price.
+    if (!l.price || l.price <= 0) { result.failed++; continue; }
     todo.push(l);
   }
 
@@ -504,7 +542,10 @@ export async function computeForListings(listingIds, { limit = 80 } = {}) {
       const job = batchJobs[k];
       const item = parsed[k];
       let clamped = item ? clampResult(item, job.listing.price) : null;
-      if (!clamped) clamped = extractFromRegex(job.listing); // graceful degradation
+      // Graceful degradation chain: regex over the listing text first, then
+      // the size-based heuristic so EVERY listing with a rent ends up with
+      // a total (marked estimated when guessed).
+      if (!clamped) clamped = extractFromRegex(job.listing) || heuristicEstimate(job.listing);
       if (clamped) {
         await query(
           `UPDATE listings SET total_estimate = $1, total_breakdown = $2 WHERE id = $3`,

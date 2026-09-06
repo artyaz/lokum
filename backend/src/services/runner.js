@@ -282,6 +282,64 @@ async function getPrevRunListingIds(sourceId) {
 }
 
 /**
+ * Backlog catch-up for description rewrites. Finds the oldest ACTIVE
+ * listings that still lack description_en, builds translateBatch jobs for
+ * up to `limit` of them, and runs the standard batched pipeline (cache
+ * lookup + ≤5 listings per AI call). Oldest-first ordering guarantees the
+ * backlog converges instead of starving early listings.
+ */
+async function translateBacklog(limit) {
+  const rows = await many(
+    `SELECT l.id, l.title, l.description, l.price, l.area, l.rooms, l.floor,
+            l.district, l.raw, c.name AS city_name
+     FROM listings l
+     JOIN cities c ON c.id = l.city_id
+     WHERE l.is_active = TRUE
+       AND l.description_en IS NULL
+       AND l.description IS NOT NULL AND l.description <> ''
+     ORDER BY l.first_seen_at ASC
+     LIMIT $1`,
+    [limit]
+  ).catch(() => []);
+  if (!rows.length) return { translated: 0, cached: 0, failed: 0, aiCalls: 0 };
+  const jobs = rows.map(r => ({
+    listingId: r.id,
+    payload: {
+      title: r.title,
+      description: r.description,
+      price: r.price,
+      city: r.city_name,
+      district: r.district,
+      area: r.area,
+      rooms: r.rooms,
+      floor: r.floor,
+      params: r.raw?.params || []
+    }
+  }));
+  return translateBatch(jobs);
+}
+
+/**
+ * Backlog catch-up for total monthly prices. Same oldest-first convergence
+ * as translateBacklog: the oldest ACTIVE listings with a rent but no
+ * total_estimate get computed (AI batch → regex → size heuristic, so every
+ * listing with a rent ends up with a total).
+ */
+async function priceBacklog(limit) {
+  const rows = await many(
+    `SELECT id FROM listings
+     WHERE is_active = TRUE
+       AND total_estimate IS NULL
+       AND price IS NOT NULL AND price > 0
+     ORDER BY first_seen_at ASC
+     LIMIT $1`,
+    [limit]
+  ).catch(() => []);
+  if (!rows.length) return { computed: 0, cached: 0, failed: 0, aiCalls: 0 };
+  return computeForListings(rows.map(r => r.id), { limit: rows.length });
+}
+
+/**
  * Run a fetch cycle.
  *
  * @param {Object} opts
@@ -675,6 +733,29 @@ export async function runFetchCycle({ triggeredBy = 'cron', sourceIds = [], city
       }
     } catch (e) {
       console.error('[runner] enrich backfill failed:', e.message);
+    }
+
+    // Backlog catch-up: the new-listing phases above are capped (120
+    // translations, 80 price estimates per run), so on busy days older
+    // listings would NEVER get a rewrite or a total. These passes sweep
+    // the oldest uncovered active listings each run (bounded by
+    // AI_BACKLOG_PER_RUN) so coverage converges to ALL listings over
+    // successive cycles. They run AFTER enrichment because enrichment may
+    // have just filled the descriptions/coords these passes consume.
+    try {
+      const backlogN = parseInt(process.env.AI_BACKLOG_PER_RUN || '60', 10);
+      if (backlogN > 0) {
+        const tr = await translateBacklog(backlogN);
+        if (tr.translated || tr.cached) {
+          console.log(`[runner] translate backlog: ${tr.translated} translated (cached ${tr.cached}, failed ${tr.failed}, ${tr.aiCalls} AI calls)`);
+        }
+        const pr = await priceBacklog(backlogN);
+        if (pr.computed || pr.cached) {
+          console.log(`[runner] price backlog: ${pr.computed} computed (cached ${pr.cached}, failed ${pr.failed}, ${pr.aiCalls} AI calls)`);
+        }
+      }
+    } catch (e) {
+      console.error('[runner] AI backlog failed:', e.message);
     }
 
     // Cross-run dedup: now that enrichment gave coords to previously-unlocated
