@@ -97,12 +97,17 @@ export function nearestMetro(lat, lng) {
  * @returns {Promise<{updated:number, remaining:number}>}
  */
 export async function backfillMetro(limit = 500) {
+  // Warsaw only (cities.slug = 'warsaw'): other cities have no metro rows
+  // in this dataset, and stamping them with a 250 km-distant "nearest"
+  // Warsaw station would render a nonsense chip on their cards.
   const rows = await many(
-    `SELECT id, lat, lng FROM listings
-     WHERE is_active = TRUE
-       AND lat IS NOT NULL AND lng IS NOT NULL
-       AND nearest_metro IS NULL
-     ORDER BY first_seen_at ASC
+    `SELECT l.id, l.lat, l.lng FROM listings l
+     JOIN cities c ON c.id = l.city_id
+     WHERE l.is_active = TRUE
+       AND c.slug = 'warsaw'
+       AND l.lat IS NOT NULL AND l.lng IS NOT NULL
+       AND l.nearest_metro IS NULL
+     ORDER BY l.first_seen_at ASC
      LIMIT $1`,
     [limit]
   ).catch(() => []);
@@ -120,8 +125,10 @@ export async function backfillMetro(limit = 500) {
   let remaining = 0;
   try {
     const c = await query(
-      `SELECT COUNT(*)::int AS n FROM listings
-       WHERE is_active = TRUE AND lat IS NOT NULL AND lng IS NOT NULL AND nearest_metro IS NULL`
+      `SELECT COUNT(*)::int AS n FROM listings l
+       JOIN cities c ON c.id = l.city_id
+       WHERE l.is_active = TRUE AND c.slug = 'warsaw'
+         AND l.lat IS NOT NULL AND l.lng IS NOT NULL AND l.nearest_metro IS NULL`
     );
     remaining = c.rows[0]?.n || 0;
   } catch { /* best-effort */ }
