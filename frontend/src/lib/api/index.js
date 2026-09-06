@@ -1,5 +1,7 @@
 // API client — wraps fetch with cookies + JSON.
-const BASE = ''; // same-origin
+// Same-origin by default. For a split deploy (UI on Vercel, API on the VPS)
+// set VITE_API_URL to the public API origin, e.g. VITE_API_URL=https://flats.chmyl.com
+const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
 async function request(method, url, { body, headers, raw } = {}) {
   const opts = {

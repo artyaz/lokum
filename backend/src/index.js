@@ -60,9 +60,15 @@ app.use('/api/pois', poiRoutes);
 // other messengers render the photo preview when a link is pasted.
 app.use('/s', sharePageRoutes);
 
-// Serve built frontend (../frontend/dist)
+// Serve built frontend (../frontend/dist), unless API-only mode.
+// SERVE_FRONTEND=0 turns this server into a pure JSON API for a split
+// deploy (UI on Vercel calling this backend + cron on the backend).
+// Default '1' preserves the current same-origin behaviour.
 const frontendDist = path.resolve(__dirname, '..', '..', 'frontend', 'dist');
-if (fs.existsSync(frontendDist)) {
+if (process.env.SERVE_FRONTEND === '0') {
+  console.log('[server] SERVE_FRONTEND=0 → API-only mode (frontend not served)');
+  app.get(/^(?!\/api|\/s\/).*/, (req, res) => res.status(404).json({ error: 'frontend_disabled' }));
+} else if (fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist));
   app.get(/^(?!\/api|\/s\/).*/, (req, res) => {
     res.sendFile(path.join(frontendDist, 'index.html'));

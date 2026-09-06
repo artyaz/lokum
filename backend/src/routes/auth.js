@@ -15,6 +15,12 @@ import { one } from '../db.js';
 
 const router = Router();
 
+// Cookie SameSite mode. Default 'lax' (same-origin UI served by this
+// server). Set COOKIE_SAMESITE=none when the UI runs on a different origin
+// (Vercel) so the session cookie is sent cross-site (requires HTTPS, i.e.
+// COOKIE_SECURE != '0', which browsers mandate for SameSite=None).
+const COOKIE_SAMESITE = (process.env.COOKIE_SAMESITE || 'lax').toLowerCase() === 'none' ? 'none' : 'lax';
+
 // RP config — works behind flats.chmyl.com nginx
 function rpConfig(req) {
   const origin = process.env.PUBLIC_ORIGIN || `https://${req.headers.host}`;
@@ -42,7 +48,7 @@ router.post('/signup', async (req, res) => {
     const { sid, expiresAt } = await createSession(user.id);
     res.cookie('sid', sid, {
       httpOnly: true,
-      sameSite: 'lax',
+      sameSite: COOKIE_SAMESITE,
       secure: process.env.COOKIE_SECURE !== '0',
       maxAge: expiresAt - new Date(),
       path: '/'
@@ -67,7 +73,7 @@ router.post('/login', async (req, res) => {
     if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
     const { sid, expiresAt } = await createSession(user.id);
     res.cookie('sid', sid, {
-      httpOnly: true, sameSite: 'lax',
+      httpOnly: true, sameSite: COOKIE_SAMESITE,
       secure: process.env.COOKIE_SECURE !== '0',
       maxAge: expiresAt - new Date(), path: '/'
     });
@@ -120,7 +126,7 @@ router.post('/passkey/register/options', requireUser, async (req, res) => {
     });
     // stash challenge in session-like cookie (short-lived)
     res.cookie('pk_reg_challenge', opts.challenge, {
-      httpOnly: true, sameSite: 'lax',
+      httpOnly: true, sameSite: COOKIE_SAMESITE,
       secure: process.env.COOKIE_SECURE !== '0',
       maxAge: 5 * 60_000, path: '/'
     });
@@ -177,7 +183,7 @@ router.post('/passkey/login/options', async (req, res) => {
       userVerification: 'preferred'
     });
     res.cookie('pk_auth_challenge', opts.challenge, {
-      httpOnly: true, sameSite: 'lax',
+      httpOnly: true, sameSite: COOKIE_SAMESITE,
       secure: process.env.COOKIE_SECURE !== '0',
       maxAge: 5 * 60_000, path: '/'
     });
@@ -220,7 +226,7 @@ router.post('/passkey/login/verify', async (req, res) => {
 
     const { sid, expiresAt } = await createSession(user.id);
     res.cookie('sid', sid, {
-      httpOnly: true, sameSite: 'lax',
+      httpOnly: true, sameSite: COOKIE_SAMESITE,
       secure: process.env.COOKIE_SECURE !== '0',
       maxAge: expiresAt - new Date(), path: '/'
     });
