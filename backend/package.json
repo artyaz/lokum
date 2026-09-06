@@ -1,0 +1,38 @@
+{
+  "name": "lokum-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --max-old-space-size=4096 src/index.js",
+    "migrate": "node src/migrate.js",
+    "seed": "node src/seed.js",
+    "scrape": "node src/run_scrape.js",
+    "cron:oneshot": "LOKUM_ONESHOT=1 node src/run_cron.js",
+    "dev": "node --watch src/index.js",
+    "dev:fake": "FAKE_DB=1 COOKIE_SECURE=0 node --watch src/index.js",
+    "setup:facebook": "python3 -m venv .scraper-venv && .scraper-venv/bin/pip install --upgrade pip && .scraper-venv/bin/pip install -r requirements.facebook.txt",
+    "test:ui": "node scripts/ui-smoke.cjs",
+    "test:functional": "node scripts/ui-functional.cjs",
+    "test": "FACEBOOK_COOKIE_KEY=local-test-only node --test scripts/test_facebook_scraper.mjs"
+  },
+  "dependencies": {
+    "@simplewebauthn/server": "^10.0.0",
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "cron-parser": "^4.9.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jpeg-js": "^0.4.4",
+    "node-cron": "^3.0.3",
+    "pg": "^8.12.0",
+    "uuid": "^9.0.1",
+    "z-ai-web-dev-sdk": "^0.0.18",
+    "playwright": "^1.53.0",
+    "undici": "^8.10.0"
+  },
+  "optionalDependencies": {
+    "sharp": "^0.33.5"
+  }
+}

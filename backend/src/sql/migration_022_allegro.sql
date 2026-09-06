@@ -1,0 +1,72 @@
+-- migration_022: Allegro.pl nieruchomości source (Task D-allegro-14)
+--
+-- Allegro.pl — Poland's largest e-commerce portal with a Nieruchomości
+-- section dedicated to apartments for rent. The "Mieszkania do wynajęcia"
+-- category at https://allegro.pl/kategoria/mieszkania-do-wynajecia-112745
+-- carries Warsaw-scoped listings at
+-- https://allegro.pl/kategoria/mazowieckie-warszawa-117037.
+--
+-- HTML scraping allegro.pl is NOT viable — the site is the most aggressive
+-- anti-bot target in Poland (enterprise-grade bot detection, custom JS,
+-- behavioral fingerprinting, CAPTCHA on suspicious traffic). The scraper
+-- therefore uses Allegro's OFFICIAL REST API at developer.allegro.pl:
+--
+--   1. OAuth2 client_credentials flow:
+--        POST https://allegro.pl/auth/oauth/token?grant_type=client_credentials
+--        Headers: Authorization: Basic base64(CLIENT_ID:CLIENT_SECRET)
+--        Response: { access_token, token_type:"Bearer", expires_in:43200,
+--                   scope, jti }  (TTL = 12 h, cached in-memory for 11 h)
+--      Requires registering an application at https://developer.allegro.pl
+--      (CLIENT_ID + CLIENT_SECRET configured via env vars).
+--
+--   2. Search: GET https://api.allegro.pl/offers/listing
+--        ?category.id=112745         (Mieszkania do wynajęcia)
+--        &location.city.id=110009    (Warszawa)
+--        &limit=60  (API hard cap)
+--        &offset=0  (paginated)
+--      Returns: { items: { promoted[], regular[] }, searchMeta: {
+--        totalElements, offset, limit }, nextPage }
+--      Each item: { id, name, images[], sellingMode.price.amount,
+--        parameters[] (Powierzchnia/Liczba pokoi/Piętro/...), location{
+--        city, region }, publication{ startedAt, endingAt } }
+--      NB: lat/lng NOT exposed by the API — enrich.js reverse-geocodes
+--      from district/city (same pattern as telegram.js).
+--
+--   3. Per-listing description: GET https://api.allegro.pl/offers/{id}
+--      Returns { description, location.cityDistrict.name, images[],
+--      parameters[] } — used to enrich the first 300 listings/cycle
+--      with the full Polish text (the /offers/listing endpoint doesn't
+--      include description).
+--
+-- !!! CRITICAL — VERIFICATION REQUIREMENT !!!
+--   As of 2025-03-15, Allegro requires the application to be "verified"
+--   before /offers/listing calls succeed. Unverified apps get HTTP 403
+--   with `{ errors: [{ code: "VerificationRequired" }] }`. As of
+--   2025-09-22 Allegro SUSPENDED verification for new apps for business
+--   reasons (see https://github.com/allegro/allegro-api/issues/12257).
+--   The scraper handles the 403 gracefully (clear actionable warning +
+--   returns []), so when Allegro reopens verification the scraper will
+--   start returning data with no code changes. Until then this source's
+--   cron runs will be no-ops (visible to operators in the cron_runs
+--   error field).
+--
+-- Source id 21 — after 20 (telegram, Task D-telegram-13, migration_019).
+-- Migration file 022: the slot gap (020, 021) was reserved by the
+-- orchestrator for sources-in-flight at chunk dispatch time (telegram
+-- migration is _019 → source 20; the orchestrator's chunk-scheduling
+-- model leaves 020/021 reserved for in-flight D-chunk subagents). Slot
+-- 22 + source_id 21 keeps the migration sequence monotonic.
+--
+-- Cross-source dedupe overlap: HIGH — Morizon Pakiet PRO+ cross-publishes
+-- listings TO Allegro (per C2 research findings), so many Allegro
+-- nieruchomości listings are duplicates of morizon (source_id=5) /
+-- gratka (source_id=4). Caught by services/dedupe.js via geo + area +
+-- rooms fingerprint. The remaining Allegro-organic direct-from-owner
+-- listings are the incremental signal.
+
+INSERT INTO sources (id, name, slug, color, base_url) VALUES
+  (21, 'Allegro', 'allegro', '#FF5A00', 'https://allegro.pl')
+ON CONFLICT (slug) DO UPDATE SET
+  name = EXCLUDED.name,
+  color = EXCLUDED.color,
+  base_url = EXCLUDED.base_url;

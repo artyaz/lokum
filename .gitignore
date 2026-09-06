@@ -1,0 +1,29 @@
+node_modules/
+dist/
+build/
+.env
+.env.*
+!**/.env.example
+!**/.gitkeep
+.scraper-venv/
+__pycache__/
+*.log
+.DS_Store
+*.bak*
+*.dump
+
+# Local-only secrets and ops artefacts — never commit.
+.admin_credentials
+.pgpass_secret
+worklog.md
+backups/
+pgdata/
+*.cookies.json
+facebook.cookies.json
+
+# Always-on fetcher (Task I — H4 design): per-platform persistent Playwright
+# storageState files (cookies + localStorage). May contain session cookies,
+# so the actual state files are NOT tracked — only the .gitkeep directory
+# marker is.
+backend/.playwright-state/*
+!backend/.playwright-state/.gitkeep
