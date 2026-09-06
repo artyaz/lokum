@@ -1,9 +1,40 @@
 // API client — wraps fetch with cookies + JSON.
 // Same-origin by default. For a split deploy (UI on Vercel, API on the VPS)
 // set VITE_API_URL to the public API origin, e.g. VITE_API_URL=https://flats.chmyl.com
-const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+import { get } from 'svelte/store';
+import { user } from '../store.js';
+
+const BASE = (import.meta.env?.VITE_API_URL || '').replace(/\/$/, '');
+
+// Endpoints that must work without a session: the login bootstrap
+// (me/login/logout/passkey login) and public share links. Everything else
+// requires a logged-in user — request() throws before any fetch() leaves
+// the browser, so authed-only traffic never hits the API origin unauthenticated.
+const PUBLIC_ENDPOINTS = new Set([
+  'GET /api/auth/me',
+  'POST /api/auth/login',
+  'POST /api/auth/logout',
+  'POST /api/auth/passkey/login/options',
+  'POST /api/auth/passkey/login/verify'
+]);
+
+export function isPublicEndpoint(method, url) {
+  const m = String(method || 'GET').toUpperCase();
+  const path = String(url || '').split('?')[0];
+  if (PUBLIC_ENDPOINTS.has(m + ' ' + path)) return true;
+  // Public share links (/api/public/:token) stay viewable without login.
+  if (m === 'GET' && path.startsWith('/api/public/') && path.length > '/api/public/'.length) return true;
+  return false;
+}
+
+export function isAuthenticated() {
+  return get(user) != null;
+}
 
 async function request(method, url, { body, headers, raw } = {}) {
+  if (!isPublicEndpoint(method, url) && !isAuthenticated()) {
+    throw new ApiError('not_authenticated', 'Please log in to continue.');
+  }
   const opts = {
     method,
     credentials: 'include',
@@ -39,8 +70,7 @@ export class ApiError extends Error {
 }
 
 export const api = {
-  // auth
-  signup: (body) => request('POST', '/api/auth/signup', { body }),
+  // auth (signup removed: registration is disabled, see routes/Signup.svelte)
   login: (body) => request('POST', '/api/auth/login', { body }),
   logout: () => request('POST', '/api/auth/logout'),
   me: () => request('GET', '/api/auth/me'),

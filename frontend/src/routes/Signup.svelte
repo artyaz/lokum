@@ -1,34 +1,10 @@
 <script>
-  import { api, ApiError } from '../lib/api';
-  import { user } from '../lib/store';
   import { navigate } from '../lib/router';
   import Icon from '../lib/icons/Icon.svelte';
 
-  let name = '';
-  let email = '';
-  let password = '';
-  let error = '';
-  let loading = false;
-
-  async function submit() {
-    error = '';
-    if (!name || !email || !password) { error = 'Please fill in all fields.'; return; }
-    if (password.length < 6) { error = 'Password must be at least 6 characters.'; return; }
-    loading = true;
-    try {
-      const r = await api.signup({ name, email, password });
-      user.set(r.user);
-      navigate('/passkey-setup');
-    } catch (e) {
-      if (e instanceof ApiError && e.code === 'email_in_use') {
-        error = 'An account with that email already exists.';
-      } else {
-        error = e.message || 'Could not create account.';
-      }
-    } finally {
-      loading = false;
-    }
-  }
+  // New registrations are paused — see the notice below. The repo's issue
+  // tracker is where account requests are handled for now.
+  const ISSUES_URL = 'https://github.com/artyaz/lokum/issues/new';
 </script>
 
 <div class="screen scroll no-scrollbar">
@@ -37,26 +13,16 @@
       <Icon name="back" size={18} color="#201E1B" />
     </button>
   </div>
-  <h1>Create your account</h1>
-  <p class="lede">Start your day with the newest listings, filtered your way.</p>
+  <h1>New accounts are currently disabled</h1>
+  <p class="lede">We're not accepting new registrations right now. If you need an account, please open a GitHub issue and we'll sort it out quickly.</p>
 
-  <form on:submit|preventDefault={submit}>
-    <label class="label" for="name">Full name</label>
-    <input id="name" type="text" class="input" bind:value={name} placeholder="Anna Kowalska" autocomplete="name" />
-
-    <label class="label" for="email" style="margin-top:16px">Email</label>
-    <input id="email" type="email" class="input" bind:value={email} placeholder="you@email.com" autocomplete="email" />
-
-    <label class="label" for="pw" style="margin-top:16px">Password</label>
-    <input id="pw" type="password" class="input" bind:value={password} placeholder="Create a password" autocomplete="new-password" />
-
-    {#if error}<div class="error">{error}</div>{/if}
-
-    <button class="btn btn-primary btn-full" type="submit" style="margin-top:26px" disabled={loading}>
-      {loading ? 'Creating…' : 'Create account'}
-    </button>
-  </form>
-  <p class="terms">By continuing you agree to our Terms & Privacy Policy.</p>
+  <a class="btn btn-primary btn-full" style="text-decoration:none" href={ISSUES_URL} target="_blank" rel="noopener noreferrer">
+    Open a GitHub issue
+  </a>
+  <button class="btn btn-secondary btn-full" style="margin-top:12px" on:click={() => navigate('/login')}>
+    Back to log in
+  </button>
+  <p class="terms">Please include the email address you'd like to register and we'll create the account for you.</p>
   <div class="footer">
     Have an account? <a on:click={() => navigate('/login')}>Log in</a>
   </div>
@@ -77,14 +43,6 @@
     line-height: 1.5;
     color: var(--muted);
     margin: 0 0 28px;
-  }
-  .error {
-    background: var(--otodom-soft);
-    color: var(--otodom);
-    font-size: 13px;
-    padding: 10px 12px;
-    border-radius: 10px;
-    margin-top: 12px;
   }
   .terms {
     font-size: 12px;
