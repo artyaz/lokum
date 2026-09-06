@@ -84,7 +84,7 @@ if (SEARCH_HTML) {
 
 // ----- TEST 2: thumbnail base64 decoder -----
 console.log('\n[T2] decodeThumbToOriginal');
-const sampleThumb = 'https://img1.staticoferty.net.pl/thumbnail/aHR0cDovL21lZGlhLmRvbXkucGwvaW1nL3pkamVjaWEvZ21nNDY0NjcxLzkvZ21nNDY0NjcxX213XzE0XzcuanBnI3Y9MV80MTE3NTc5NTU5/80/60/4/thumbnail.jpg';
+const sampleThumb = 'https://img1.staticoferty.net.pl/thumbnail/aHR0cHM6Ly9tZWRpYS5kb215LnBsL2ltZy9leGFtcGxlLmpwZw==/80/60/4/thumbnail.jpg';
 const decoded = scraper.constructor.prototype
   ? OfertyNetScraper // not directly callable — use the function via an instance helper
   : null;
